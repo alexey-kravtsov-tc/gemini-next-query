@@ -53,25 +53,27 @@ function triggerButton(index) {
     if (!buttonsDiv) return;
     const btns = buttonsDiv.querySelectorAll('button');
     if (btns[index]) {
-        // Remove the "[N] " prefix
+        // Strip the [N] prefix
         const rawText = btns[index].textContent;
         const cleanText = rawText.replace(/^\[\d+\]\s+/, '');
         
         const inputArea = document.querySelector('rich-textarea, div[contenteditable="true"][aria-label*="prompt"], textarea');
+        if (!inputArea) return;
+
         inputArea.focus();
         document.execCommand('selectAll', false, null);
         document.execCommand('insertText', false, cleanText);
         
-        // Emulate Return key
-        const event = new KeyboardEvent('keydown', {
-            key: 'Enter',
-            code: 'Enter',
-            keyCode: 13,
-            which: 13,
-            bubbles: true,
-            cancelable: true
-        });
-        inputArea.dispatchEvent(event);
+        // Dispatch input event so Gemini's framework knows text was inserted
+        inputArea.dispatchEvent(new Event('input', { bubbles: true }));
+
+        // Wait a few milliseconds for the UI to register the text, then click the send button
+        setTimeout(() => {
+            const sendBtn = document.querySelector('button[aria-label="Send message"]');
+            if (sendBtn) {
+                sendBtn.click();
+            }
+        }, 100);
     }
 }
 
@@ -197,6 +199,7 @@ function renderButtons(queries) {
             inputArea.focus();
             document.execCommand('selectAll', false, null);
             document.execCommand('insertText', false, q);
+            inputArea.dispatchEvent(new Event('input', { bubbles: true }));
         };
         buttonsDiv.appendChild(btn);
     });
