@@ -29,7 +29,6 @@ chrome.storage.sync.get(['showLogs'], (res) => {
     if (res.showLogs !== undefined) showLogs = res.showLogs;
 });
 
-// Shortcut Handling
 document.addEventListener('keydown', (e) => {
     const inputArea = document.querySelector('rich-textarea, div[contenteditable="true"][aria-label*="prompt"], textarea');
     if (!inputArea || (inputArea.innerText || inputArea.value || '').trim().length > 0) return;
@@ -37,13 +36,11 @@ document.addEventListener('keydown', (e) => {
     const key = e.key;
     if (['1', '2', '3', '4'].includes(key)) {
         if (key === lastShortcutKey) {
-            // Double press detected
             clearTimeout(shortcutTimer);
             lastShortcutKey = null;
             triggerButton(parseInt(key) - 1);
             e.preventDefault();
         } else {
-            // First press or new key
             clearTimeout(shortcutTimer);
             lastShortcutKey = key;
             shortcutTimer = setTimeout(() => { lastShortcutKey = null; }, 1000);
@@ -56,15 +53,25 @@ function triggerButton(index) {
     if (!buttonsDiv) return;
     const btns = buttonsDiv.querySelectorAll('button');
     if (btns[index]) {
-        const text = btns[index].textContent;
+        // Remove the "[N] " prefix
+        const rawText = btns[index].textContent;
+        const cleanText = rawText.replace(/^\[\d+\]\s+/, '');
+        
         const inputArea = document.querySelector('rich-textarea, div[contenteditable="true"][aria-label*="prompt"], textarea');
         inputArea.focus();
         document.execCommand('selectAll', false, null);
-        document.execCommand('insertText', false, text);
+        document.execCommand('insertText', false, cleanText);
         
-        // Automated Submit
-        const sendBtn = document.querySelector('button[aria-label*="Send"], button[data-test-id="send-button"]');
-        if (sendBtn) sendBtn.click();
+        // Emulate Return key
+        const event = new KeyboardEvent('keydown', {
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+            cancelable: true
+        });
+        inputArea.dispatchEvent(event);
     }
 }
 
