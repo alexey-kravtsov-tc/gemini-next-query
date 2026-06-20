@@ -58,28 +58,28 @@ const observer = new MutationObserver(() => {
 
 observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 
-function getOrCreateContainer(injectTarget) {
+function getOrCreateContainer(chatHistoryElem) {
     let container = document.getElementById('gemini-ext-container');
     if (!container) {
         isInjecting = true;
         container = document.createElement('div');
         container.id = 'gemini-ext-container';
         
-        // Placed outside, centered, with explicit syncing to injectTarget's width
-        container.style.cssText = 'margin: 0 auto 16px auto; padding: 0; box-sizing: border-box; font-family: system-ui, sans-serif; position: relative; z-index: 10; transition: width 0.1s ease-out;';
+        // Match width properties natively relative to the parent bounding constraints
+        container.style.cssText = 'width: 100%; box-sizing: border-box; font-family: system-ui, sans-serif; position: relative; z-index: 10; margin-top: 16px; margin-bottom: 16px; padding: 0 4px;';
 
         const syncWidth = () => {
-            if (injectTarget) {
-                container.style.width = injectTarget.offsetWidth + 'px';
+            if (chatHistoryElem) {
+                container.style.width = chatHistoryElem.offsetWidth + 'px';
             }
         };
         
         syncWidth();
         const resizeObserver = new ResizeObserver(syncWidth);
-        resizeObserver.observe(injectTarget);
+        resizeObserver.observe(chatHistoryElem);
 
         const header = document.createElement('div');
-        header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 12px; color: #888; padding: 0 4px;';
+        header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 12px; color: #888;';
 
         const title = document.createElement('div');
         title.textContent = 'Gemini Next Query';
@@ -128,8 +128,8 @@ function getOrCreateContainer(injectTarget) {
         container.appendChild(loader);
         container.appendChild(buttons);
 
-        // Inject right before the input container parent to stay separate
-        injectTarget.parentElement.insertBefore(container, injectTarget);
+        // Insert explicitly right below the chat-history element container boundary
+        chatHistoryElem.insertAdjacentElement('afterend', container);
         isInjecting = false;
     }
 
@@ -194,6 +194,9 @@ async function processChat() {
     const isGenerating = document.querySelector('button[aria-label*="stop" i], button[aria-label*="Stop generating"]');
     if (isGenerating) return;
 
+    const chatHistoryElem = document.getElementById('chat-history');
+    if (!chatHistoryElem) return;
+
     let chatText = document.body.innerText || "";
     const containerElem = document.getElementById('gemini-ext-container');
     if (containerElem) {
@@ -206,11 +209,7 @@ async function processChat() {
     const currentHash = hashCode(chatText);
     if (currentHash === lastProcessedHash) return;
 
-    // Use form as the boundary object to match exact width of the input panel
-    const injectTarget = inputArea.closest('form') || inputArea.closest('div[class*="input"]') || inputArea.parentElement;
-    if (!injectTarget || !injectTarget.parentElement) return;
-
-    getOrCreateContainer(injectTarget);
+    getOrCreateContainer(chatHistoryElem);
     
     if (predictionCache[currentHash]) {
         addLog(`--- Process Triggered ---`);
