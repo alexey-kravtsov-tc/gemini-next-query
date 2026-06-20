@@ -26,13 +26,19 @@ async function testApiKey() {
     try {
         status.textContent = 'Testing...';
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        if (!response.ok) throw new Error('Invalid API Key');
+        
+        // Extract full error body if response is not ok
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error?.message || `Status: ${response.status}`);
+        }
         
         const data = await response.json();
-        const models = data.models.filter(m => m.supportedMethodNames.includes('generateContent'));
+        // Safe access: Check if supportedMethodNames exists
+        const models = data.models.filter(m => (m.supportedMethodNames || []).includes('generateContent'));
         
         select.innerHTML = '';
-        let targetModel = models[models.length - 1].name; // Default to last
+        let targetModel = models[models.length - 1].name;
         
         models.forEach(m => {
             const opt = document.createElement('option');
@@ -47,6 +53,7 @@ async function testApiKey() {
         status.textContent = 'Success! Models updated.';
     } catch (e) {
         status.textContent = 'Error: ' + e.message;
+        console.error('API Test Error:', e);
     }
 }
 
