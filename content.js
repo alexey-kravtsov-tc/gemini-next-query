@@ -16,6 +16,8 @@ function loadBindings() {
     chrome.storage.sync.get(['k1', 'k2', 'k3', 'k4', 'showLogs'], (res) => {
         keyBindings = { [res.k1 || '1']: 0, [res.k2 || '2']: 1, [res.k3 || '3']: 2, [res.k4 || '4']: 3 };
         showLogs = res.showLogs || false;
+        const logs = document.getElementById('gemini-ext-logs');
+        if (logs) logs.style.display = showLogs ? 'block' : 'none';
     });
 }
 loadBindings();
@@ -49,6 +51,16 @@ function triggerButton(index) {
     }
 }
 
+function addLog(message, isError = false) {
+    const logsDiv = document.getElementById('gemini-ext-logs');
+    if (!logsDiv) return;
+    const entry = document.createElement('div');
+    entry.style.cssText = `margin-bottom: 4px; font-family: monospace; font-size: 10px; color: ${isError ? '#ff6b6b' : '#a8c7fa'}; ${isError ? 'font-weight: bold;' : ''}`;
+    entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    logsDiv.appendChild(entry);
+    logsDiv.scrollTop = logsDiv.scrollHeight;
+}
+
 function updatePaginationUI() {
     const pag = document.getElementById('gemini-pagination');
     if (!pag) return;
@@ -56,7 +68,7 @@ function updatePaginationUI() {
     const current = chatSession.currentIndex + 1;
     pag.innerHTML = `
         <button class="pagination-btn" id="prev-btn" ${chatSession.currentIndex <= 0 ? 'disabled' : ''}>&lt;</button>
-        <span style="margin: 0 8px; font-size: 12px;">${count > 0 ? current : 0} / ${count}</span>
+        <span style="margin: 0 8px; font-size: 12px; color: #aaa;">${count > 0 ? current : 0} / ${count}</span>
         <button class="pagination-btn" id="next-btn" ${chatSession.currentIndex >= count - 1 ? 'disabled' : ''}>&gt;</button>
     `;
     document.getElementById('prev-btn').onclick = () => { if (chatSession.currentIndex > 0) { chatSession.currentIndex--; renderButtons(chatSession.history[chatSession.currentIndex]); updatePaginationUI(); } };
@@ -75,21 +87,22 @@ function getOrCreateContainer(chatHistoryElem) {
         syncWidth(); new ResizeObserver(syncWidth).observe(chatHistoryElem);
 
         const header = document.createElement('div');
-        header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 12px; color: #888;';
+        header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;';
         
-        const title = document.createElement('div'); title.textContent = 'Gemini Next Query'; title.style.cssText = 'font-weight:600; color:#e8eaed;';
+        const title = document.createElement('div'); title.textContent = 'Gemini Next Query'; title.style.cssText = 'font-weight:600; color:#e8eaed; font-size: 12px;';
         const pagination = document.createElement('div'); pagination.id = 'gemini-pagination'; pagination.style.cssText = 'display:flex; align-items:center; gap:4px;';
         const controls = document.createElement('div'); controls.style.cssText = 'display:flex; gap:16px; align-items:center;';
         
-        const toggleLabel = document.createElement('label'); toggleLabel.innerHTML = `<input type="checkbox" id="gemini-log-toggle" ${showLogs ? 'checked' : ''}> Logs`;
+        const toggleLabel = document.createElement('label'); toggleLabel.style.fontSize = '12px'; toggleLabel.style.color = '#888';
+        toggleLabel.innerHTML = `<input type="checkbox" id="gemini-log-toggle" ${showLogs ? 'checked' : ''}> Logs`;
         toggleLabel.querySelector('input').onchange = (e) => { showLogs = e.target.checked; chrome.storage.sync.set({ showLogs }); document.getElementById('gemini-ext-logs').style.display = showLogs ? 'block' : 'none'; };
         
-        const settingsBtn = document.createElement('button'); settingsBtn.textContent = '⚙️'; settingsBtn.onclick = () => chrome.runtime.sendMessage({ action: 'openOptions' });
+        const settingsBtn = document.createElement('button'); settingsBtn.textContent = '⚙️'; settingsBtn.style.background = 'none'; settingsBtn.style.border = 'none'; settingsBtn.style.cursor = 'pointer'; settingsBtn.onclick = () => chrome.runtime.sendMessage({ action: 'openOptions' });
         
         controls.append(toggleLabel, settingsBtn);
         header.append(title, pagination, controls);
         
-        const logs = document.createElement('div'); logs.id = 'gemini-ext-logs'; logs.style.cssText = `display: ${showLogs ? 'block' : 'none'}; max-height: 100px; overflow-y: auto; background: rgba(30,30,30,0.8); border: 1px solid #444; border-radius: 4px; padding: 6px; margin-bottom: 12px; font-family: monospace; font-size: 10px; color: #a8c7fa;`;
+        const logs = document.createElement('div'); logs.id = 'gemini-ext-logs'; logs.style.cssText = `display: ${showLogs ? 'block' : 'none'}; max-height: 100px; overflow-y: auto; background: rgba(30,30,30,0.8); border: 1px solid #444; border-radius: 4px; padding: 6px; margin-bottom: 12px;`;
         const loader = document.createElement('div'); loader.id = 'gemini-ext-loader'; loader.style.cssText = 'display: none; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, #8ab4f8, transparent); animation: geminiExtLoading 1.5s infinite linear; margin-bottom: 12px;';
         const buttons = document.createElement('div'); buttons.id = 'gemini-ext-buttons'; buttons.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%;';
         
@@ -102,6 +115,7 @@ function getOrCreateContainer(chatHistoryElem) {
 
 function renderButtons(queries) {
     const buttonsDiv = document.getElementById('gemini-ext-buttons');
+    if (!buttonsDiv) return;
     buttonsDiv.innerHTML = '';
     const revMap = Object.entries(keyBindings).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {});
     queries.forEach((q, i) => {
@@ -141,9 +155,10 @@ async function processChat() {
     if (currentHash === lastProcessedHash) return;
 
     getOrCreateContainer(chatHistoryElem);
+    addLog('Processing chat context...');
     
     chrome.storage.sync.get(['apiKey'], async (items) => {
-        if (!items.apiKey) return;
+        if (!items.apiKey) { addLog('API Key Missing', true); return; }
         lastProcessedHash = currentHash;
         document.getElementById('gemini-ext-loader').style.display = 'block';
         try {
@@ -159,8 +174,10 @@ async function processChat() {
             document.getElementById('gemini-ext-loader').style.display = 'none';
             renderButtons(queries);
             updatePaginationUI();
+            addLog('Successfully retrieved and rendered queries.');
         } catch (e) {
             document.getElementById('gemini-ext-loader').style.display = 'none';
+            addLog(`Error: ${e.message}`, true);
         }
     });
 }
