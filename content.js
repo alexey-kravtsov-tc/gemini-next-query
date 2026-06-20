@@ -65,7 +65,6 @@ function getOrCreateContainer(chatHistoryElem) {
         container = document.createElement('div');
         container.id = 'gemini-ext-container';
         
-        // Match width properties natively relative to the parent bounding constraints
         container.style.cssText = 'width: 100%; box-sizing: border-box; font-family: system-ui, sans-serif; position: relative; z-index: 10; margin-top: 16px; margin-bottom: 16px; padding: 0 4px;';
 
         const syncWidth = () => {
@@ -128,7 +127,6 @@ function getOrCreateContainer(chatHistoryElem) {
         container.appendChild(loader);
         container.appendChild(buttons);
 
-        // Insert explicitly right below the chat-history element container boundary
         chatHistoryElem.insertAdjacentElement('afterend', container);
         isInjecting = false;
     }
@@ -225,8 +223,23 @@ async function processChat() {
 
     chrome.storage.sync.get(['apiKey', 'maxWords'], async (items) => {
         if (!items.apiKey) {
-            addLog('ERROR: Gemini API Key missing. Click Settings to configure.', true);
+            addLog('ERROR: Gemini API Key missing.', true);
             toggleLoader(false);
+            
+            const buttonsDiv = document.getElementById('gemini-ext-buttons');
+            if (buttonsDiv) {
+                buttonsDiv.innerHTML = '';
+                const btn = document.createElement('button');
+                btn.textContent = '🔑 API Key Required - Click here to Open Settings';
+                btn.style.cssText = 'grid-column: 1 / -1; padding: 12px; border-radius: 8px; border: 1px solid rgba(255,107,107,0.4); background: rgba(255,107,107,0.1); color: #ff6b6b; cursor: pointer; text-align: center; font-size: 13px; font-weight: bold; transition: background 0.2s;';
+                btn.onmouseover = () => btn.style.background = 'rgba(255,107,107,0.2)';
+                btn.onmouseout = () => btn.style.background = 'rgba(255,107,107,0.1)';
+                btn.onclick = (e) => {
+                    e.preventDefault();
+                    chrome.runtime.sendMessage({ action: 'openOptions' });
+                };
+                buttonsDiv.appendChild(btn);
+            }
             return;
         }
 
