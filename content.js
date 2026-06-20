@@ -21,7 +21,16 @@ function hashCode(str) {
     return hash.toString();
 }
 
-// Ensure the UI exists and returns references to DOM elements
+function addLog(message, isError = false) {
+    const logsDiv = document.getElementById('gemini-ext-logs');
+    if (!logsDiv) return;
+    const entry = document.createElement('div');
+    entry.style.cssText = `margin-bottom: 4px; ${isError ? 'color: #ff6b6b;' : 'color: #a8c7fa;'}`;
+    entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    logsDiv.appendChild(entry);
+    logsDiv.scrollTop = logsDiv.scrollHeight;
+}
+
 function getOrCreateContainer(chatHistoryElem) {
     let container = document.getElementById('gemini-ext-container');
     if (!container) {
@@ -32,46 +41,24 @@ function getOrCreateContainer(chatHistoryElem) {
         const syncWidth = () => { if (chatHistoryElem) container.style.width = chatHistoryElem.offsetWidth + 'px'; };
         new ResizeObserver(syncWidth).observe(chatHistoryElem);
 
-        // Build Header
-        const header = document.createElement('div');
-        header.className = 'ext-header';
+        container.innerHTML = `
+            <div class="ext-header">
+                <div style="font-weight: 600; color: #e8eaed;">Gemini Next Query</div>
+                <div id="gemini-pagination" style="display: flex; align-items: center; gap: 4px;"></div>
+                <div class="ext-controls">
+                    <label><input type="checkbox" id="gemini-log-toggle"> Logs</label>
+                    <button style="background:transparent; border:none; cursor:pointer;" onclick="chrome.runtime.sendMessage({action:'openOptions'})">⚙️</button>
+                </div>
+            </div>
+            <div id="gemini-ext-logs" style="display: none; background: #000; padding: 8px; font-family: monospace; font-size: 10px; margin-bottom: 8px; border-radius: 4px; max-height: 100px; overflow-y: auto;"></div>
+            <div id="gemini-ext-loader" style="display: none; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, #8ab4f8, transparent); animation: geminiExtLoading 1.5s infinite linear; margin-bottom: 12px;"></div>
+            <div id="gemini-ext-buttons" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%;"></div>
+        `;
         
-        const title = document.createElement('div');
-        title.innerHTML = '<strong>Gemini Next Query</strong>';
-        
-        const pagination = document.createElement('div');
-        pagination.id = 'gemini-pagination';
-        
-        const controls = document.createElement('div');
-        controls.className = 'ext-controls';
-        
-        const logToggle = document.createElement('label');
-        logToggle.innerHTML = `<input type="checkbox" id="gemini-log-toggle"> Logs`;
-        logToggle.querySelector('input').onchange = (e) => {
+        container.querySelector('#gemini-log-toggle').onchange = (e) => {
             document.getElementById('gemini-ext-logs').style.display = e.target.checked ? 'block' : 'none';
         };
-
-        const settingsBtn = document.createElement('button');
-        settingsBtn.textContent = '⚙️';
-        settingsBtn.onclick = () => chrome.runtime.sendMessage({ action: 'openOptions' });
-
-        controls.append(logToggle, settingsBtn);
-        header.append(title, pagination, controls);
-
-        // Build Body
-        const logs = document.createElement('div');
-        logs.id = 'gemini-ext-logs';
-        logs.style.cssText = 'display: none; background: #000; padding: 8px; font-family: monospace; font-size: 10px; margin-bottom: 8px; border-radius: 4px;';
         
-        const loader = document.createElement('div');
-        loader.id = 'gemini-ext-loader';
-        loader.style.cssText = 'display: none; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, #8ab4f8, transparent); animation: geminiExtLoading 1.5s infinite linear; margin-bottom: 12px;';
-        
-        const buttons = document.createElement('div');
-        buttons.id = 'gemini-ext-buttons';
-        buttons.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr; gap: 8px;';
-
-        container.append(header, logs, loader, buttons);
         chatHistoryElem.insertAdjacentElement('afterend', container);
     }
     return container;
@@ -116,15 +103,21 @@ function processChat() {
         const currentHash = hashCode(chatText);
         if (currentHash === lastProcessedHash) return;
 
-        chrome.storage.sync.get(['apiKey', 'selectedModel', 'maxWords', 'showLogs'], async (items) => {
-            if (!items.apiKey) return;
+        addLog('Processing chat context...');
+        
+        chrome.storage.sync.get(['apiKey', 'selectedModel', 'maxWords'], async (items) => {
+            if (!items.apiKey) {
+                addLog('Error: API Key missing', true);
+                return;
+            }
             
             lastProcessedHash = currentHash;
-            const container = getOrCreateContainer(chatHistoryElem);
+            getOrCreateContainer(chatHistoryElem);
             document.getElementById('gemini-ext-loader').style.display = 'block';
 
             try {
                 const model = items.selectedModel || 'models/gemini-1.5-flash';
+                addLog(`Using model: ${model}`);
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${items.apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -142,9 +135,12 @@ function processChat() {
                     document.getElementById('gemini-ext-loader').style.display = 'none';
                     renderButtons(queries);
                     updatePaginationUI();
+                    addLog('Predictions generated successfully.');
+                } else {
+                    addLog('Error: No candidates returned from API.', true);
                 }
             } catch (e) { 
-                console.error('Gemini Extension Error:', e);
+                addLog(`Error: ${e.message}`, true);
                 document.getElementById('gemini-ext-loader').style.display = 'none'; 
             }
         });
