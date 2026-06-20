@@ -13,47 +13,78 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+function log(msg) {
+    const logs = document.getElementById('logs');
+    logs.value += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+    logs.scrollTop = logs.scrollHeight;
+}
+
 async function testApiKey() {
     const apiKey = document.getElementById('apiKey').value.trim();
     const status = document.getElementById('status');
+    const logs = document.getElementById('logs');
     const select = document.getElementById('modelSelect');
     
+    logs.value = ''; // Clear previous logs
+    log('Starting API Test...');
+
     if (!apiKey) {
+        log('Error: API Key is empty.');
         status.textContent = 'Please enter an API Key';
         return;
     }
 
     try {
-        status.textContent = 'Testing...';
+        log('Fetching models from API...');
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
         
-        // Extract full error body if response is not ok
+        const data = await response.json();
+        log(`Response received (Status: ${response.status})`);
+        
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error?.message || `Status: ${response.status}`);
+            log(`API Error: ${JSON.stringify(data.error)}`);
+            throw new Error(data.error?.message || 'Request failed');
+        }
+
+        if (!data.models || !Array.isArray(data.models)) {
+            log('Error: "models" field missing in response.');
+            throw new Error('Unexpected API response structure');
+        }
+
+        log(`Found ${data.models.length} models.`);
+        
+        // Filter models that support generation
+        const validModels = data.models.filter(m => 
+            Array.isArray(m.supportedGenerationMethods) && 
+            m.supportedGenerationMethods.includes('generateContent')
+        );
+
+        log(`Filtered ${validModels.length} models that support generateContent.`);
+        
+        if (validModels.length === 0) {
+            log('Error: No models found that support generateContent.');
+            throw new Error('No compatible models found');
         }
         
-        const data = await response.json();
-        // Safe access: Check if supportedMethodNames exists
-        const models = data.models.filter(m => (m.supportedMethodNames || []).includes('generateContent'));
-        
         select.innerHTML = '';
-        let targetModel = models[models.length - 1].name;
+        let targetModel = validModels[validModels.length - 1].name;
         
-        models.forEach(m => {
+        validModels.forEach(m => {
             const opt = document.createElement('option');
             opt.value = m.name;
             opt.textContent = m.name;
             select.appendChild(opt);
+            // Prioritize "lite" models
             if (m.name.toLowerCase().includes('lite')) targetModel = m.name;
         });
         
         select.value = targetModel;
         chrome.storage.sync.set({ apiKey, selectedModel: targetModel });
+        log(`Success! Set model to: ${targetModel}`);
         status.textContent = 'Success! Models updated.';
     } catch (e) {
+        log(`CRITICAL ERROR: ${e.message}`);
         status.textContent = 'Error: ' + e.message;
-        console.error('API Test Error:', e);
     }
 }
 
