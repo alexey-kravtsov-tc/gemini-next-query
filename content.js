@@ -25,6 +25,19 @@ chrome.storage.onChanged.addListener(loadBindings);
 
 const chatSession = { history: [], currentIndex: -1 };
 
+// Input listener to toggle UI visibility
+function setupInputListener(inputArea) {
+    if (inputArea.dataset.extListenerAdded) return;
+    inputArea.dataset.extListenerAdded = 'true';
+    inputArea.addEventListener('input', () => {
+        const container = document.getElementById('gemini-ext-container');
+        if (container) {
+            const text = inputArea.innerText || inputArea.value || '';
+            container.style.display = text.trim().length > 0 ? 'none' : 'block';
+        }
+    });
+}
+
 document.addEventListener('keydown', (e) => {
     const inputArea = document.querySelector('rich-textarea, div[contenteditable="true"][aria-label*="prompt"], textarea');
     if (!inputArea || (inputArea.innerText || inputArea.value || '').trim().length > 0) return;
@@ -55,7 +68,7 @@ function addLog(message, isError = false) {
     const logsDiv = document.getElementById('gemini-ext-logs');
     if (!logsDiv) return;
     const entry = document.createElement('div');
-    entry.style.cssText = `margin-bottom: 4px; font-family: monospace; font-size: 10px; color: ${isError ? '#ff6b6b' : '#a8c7fa'}; ${isError ? 'font-weight: bold;' : ''}`;
+    entry.style.cssText = `margin-bottom: 4px; font-family: monospace; font-size: 10px; color: ${isError ? '#ff6b6b' : '#a8c7fa'};`;
     entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
     logsDiv.appendChild(entry);
     logsDiv.scrollTop = logsDiv.scrollHeight;
@@ -135,6 +148,8 @@ function hashCode(str) { let hash = 0; for (let i = 0; i < str.length; i++) { ha
 
 const observer = new MutationObserver(() => {
     if (location.href !== lastUrl) { lastUrl = location.href; lastProcessedHash = null; chatSession.history = []; chatSession.currentIndex = -1; const c = document.getElementById('gemini-ext-container'); if (c) c.remove(); }
+    const inputArea = document.querySelector('rich-textarea, div[contenteditable="true"][aria-label*="prompt"], textarea');
+    if (inputArea) setupInputListener(inputArea);
     if (isInjecting) return; clearTimeout(debounceTimer); debounceTimer = setTimeout(processChat, 2000);
 });
 observer.observe(document.body, { childList: true, subtree: true, characterData: true });
@@ -152,15 +167,19 @@ async function processChat() {
     if (chatText.length < 50) return;
 
     const currentHash = hashCode(chatText);
-    if (currentHash === lastProcessedHash) return;
+    
+    // Check Cache first
+    if (chatSession.history.length > 0 && currentHash === lastProcessedHash) return;
 
     getOrCreateContainer(chatHistoryElem);
-    addLog('Processing chat context...');
     
+    addLog('Checking API...');
     chrome.storage.sync.get(['apiKey'], async (items) => {
         if (!items.apiKey) { addLog('API Key Missing', true); return; }
+        
         lastProcessedHash = currentHash;
         document.getElementById('gemini-ext-loader').style.display = 'block';
+        
         try {
             const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${items.apiKey}`, {
                 method: 'POST',
@@ -169,12 +188,14 @@ async function processChat() {
             });
             const data = await res.json();
             const queries = JSON.parse(data.candidates[0].content.parts[0].text.replace(/^[\s\S]*?\[/, '[').replace(/\][\s\S]*$/, ']'));
+            
             chatSession.history.push(queries);
             chatSession.currentIndex = chatSession.history.length - 1;
+            
             document.getElementById('gemini-ext-loader').style.display = 'none';
             renderButtons(queries);
             updatePaginationUI();
-            addLog('Successfully retrieved and rendered queries.');
+            addLog('Successfully retrieved queries.');
         } catch (e) {
             document.getElementById('gemini-ext-loader').style.display = 'none';
             addLog(`Error: ${e.message}`, true);
