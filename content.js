@@ -9,7 +9,7 @@ if (!document.getElementById('gemini-ext-styles')) {
     document.head.appendChild(style);
 }
 
-let isInjecting = false, debounceTimer, lastProcessedHash = null, showLogs = false, lastUrl = location.href, lastShortcutKey = null, shortcutTimer = null;
+let isInjecting = false, debounceTimer, lastProcessedHash = null, showLogs = false, lastUrl = typeof window !== 'undefined' ? window.location.href : '', lastShortcutKey = null, shortcutTimer = null;
 let keyBindings = { '1': 0, '2': 1, '3': 2, '4': 3 };
 
 function loadBindings() {
@@ -147,7 +147,9 @@ function renderButtons(queries) {
 function hashCode(str) { let hash = 0; for (let i = 0; i < str.length; i++) { hash = ((hash << 5) - hash) + str.charCodeAt(i); hash |= 0; } return hash.toString(); }
 
 const observer = new MutationObserver(() => {
-    if (location.href !== lastUrl) { lastUrl = location.href; lastProcessedHash = null; chatSession.history = []; chatSession.currentIndex = -1; const c = document.getElementById('gemini-ext-container'); if (c) c.remove(); }
+    if (typeof document === 'undefined') return;
+    const currentUrl = typeof window !== 'undefined' ? window.location.href : lastUrl;
+    if (currentUrl !== lastUrl) { lastUrl = currentUrl; lastProcessedHash = null; chatSession.history = []; chatSession.currentIndex = -1; const c = document.getElementById('gemini-ext-container'); if (c) c.remove(); }
     const inputArea = document.querySelector('rich-textarea, div[contenteditable="true"][aria-label*="prompt"], textarea');
     if (inputArea) setupInputListener(inputArea);
     if (isInjecting) return; clearTimeout(debounceTimer); debounceTimer = setTimeout(processChat, 2000);
@@ -202,3 +204,20 @@ async function processChat() {
         }
     });
 }
+
+if (typeof module !== 'undefined') {
+    module.exports = {
+        keyBindings,
+        loadBindings,
+        chatSession,
+        setupInputListener,
+        triggerButton,
+        addLog,
+        updatePaginationUI,
+        getOrCreateContainer,
+        renderButtons,
+        hashCode,
+        processChat
+    };
+}
+

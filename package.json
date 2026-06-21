@@ -1,0 +1,25 @@
+{
+  "name": "gemini-next-queries",
+  "version": "1.0.0",
+  "description": "A Chrome/Arc browser extension that enhances your chat experience on `gemini.google.com` by predicting and suggesting the next possible questions you might want to ask.",
+  "main": "background.js",
+  "scripts": {
+    "test": "vitest run --environment jsdom"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexey-kravtsov-tc/gemini-next-query.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/alexey-kravtsov-tc/gemini-next-query/issues"
+  },
+  "homepage": "https://github.com/alexey-kravtsov-tc/gemini-next-query#readme",
+  "devDependencies": {
+    "jsdom": "^29.1.1",
+    "vitest": "^4.1.9"
+  }
+}
