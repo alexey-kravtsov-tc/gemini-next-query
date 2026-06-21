@@ -185,4 +185,81 @@ describe('Gemini Next Queries - content.js', () => {
             expect(container.style.display).toBe('block');
         });
     });
+
+    describe('keydown shortcut listener', () => {
+        let textarea;
+        
+        beforeEach(() => {
+            content.lastShortcutKey = null;
+            textarea = document.createElement('textarea');
+            textarea.setAttribute('aria-label', 'prompt');
+            document.body.appendChild(textarea);
+            
+            // Render buttons to test triggerButton calls
+            const chatHistory = document.createElement('div');
+            chatHistory.id = 'chat-history';
+            document.body.appendChild(chatHistory);
+            content.getOrCreateContainer(chatHistory);
+            content.renderButtons(['Query 1', 'Query 2']);
+        });
+
+        it('should register shortcut key on first press without preventing default', () => {
+            const event = new KeyboardEvent('keydown', { key: '1', cancelable: true });
+            vi.spyOn(event, 'preventDefault');
+
+            document.dispatchEvent(event);
+
+            expect(event.preventDefault).not.toHaveBeenCalled();
+        });
+
+        it('should trigger button and prevent default on second press (double tap) of same key within 1s', () => {
+            const sendBtn = document.createElement('button');
+            sendBtn.setAttribute('aria-label', 'Send message');
+            const sendClickMock = vi.fn();
+            sendBtn.addEventListener('click', sendClickMock);
+            document.body.appendChild(sendBtn);
+
+            vi.useFakeTimers();
+
+            // First press of '1'
+            const event1 = new KeyboardEvent('keydown', { key: '1', cancelable: true });
+            document.dispatchEvent(event1);
+
+            // Simulating browser typing '1' into inputArea
+            textarea.value = '1';
+
+            // Second press of '1' (within 1 second)
+            const event2 = new KeyboardEvent('keydown', { key: '1', cancelable: true });
+            vi.spyOn(event2, 'preventDefault');
+            document.dispatchEvent(event2);
+
+            expect(event2.preventDefault).toHaveBeenCalled();
+            
+            // Advance timers to trigger the Send message click
+            vi.advanceTimersByTime(150);
+            expect(sendClickMock).toHaveBeenCalled();
+
+            vi.useRealTimers();
+        });
+
+        it('should NOT trigger double tap if other text is typed between presses', () => {
+            vi.useFakeTimers();
+
+            // First press of '1'
+            const event1 = new KeyboardEvent('keydown', { key: '1', cancelable: true });
+            document.dispatchEvent(event1);
+
+            // Simulating user typing more text e.g. '123'
+            textarea.value = '123';
+
+            // Second press of '1'
+            const event2 = new KeyboardEvent('keydown', { key: '1', cancelable: true });
+            vi.spyOn(event2, 'preventDefault');
+            document.dispatchEvent(event2);
+
+            expect(event2.preventDefault).not.toHaveBeenCalled();
+
+            vi.useRealTimers();
+        });
+    });
 });

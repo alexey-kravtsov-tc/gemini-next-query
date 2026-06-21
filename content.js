@@ -40,7 +40,9 @@ function setupInputListener(inputArea) {
 
 document.addEventListener('keydown', (e) => {
     const inputArea = document.querySelector('rich-textarea, div[contenteditable="true"][aria-label*="prompt"], textarea');
-    if (!inputArea || (inputArea.innerText || inputArea.value || '').trim().length > 0) return;
+    if (!inputArea) return;
+    const text = (inputArea.innerText || inputArea.value || '').trim();
+    if (text.length > 0 && text !== lastShortcutKey) return;
     const key = e.key;
     if (keyBindings.hasOwnProperty(key)) {
         if (key === lastShortcutKey) {
@@ -53,16 +55,46 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+function insertTextIntoInput(inputArea, text) {
+    let editable = inputArea;
+    if (inputArea.tagName.toLowerCase() === 'rich-textarea') {
+        editable = inputArea.shadowRoot?.querySelector('div[contenteditable="true"]') || 
+                   inputArea.querySelector('div[contenteditable="true"]') || 
+                   inputArea;
+    }
+    
+    editable.focus();
+    
+    if (editable.tagName.toLowerCase() === 'textarea' || editable.tagName.toLowerCase() === 'input') {
+        editable.select();
+        document.execCommand('insertText', false, text);
+    } else {
+        try {
+            const range = document.createRange();
+            range.selectNodeContents(editable);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } catch (e) {
+            // Fallback
+        }
+        document.execCommand('insertText', false, text);
+    }
+    
+    inputArea.dispatchEvent(new Event('input', { bubbles: true }));
+    editable.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 function triggerButton(index) {
     const btns = document.getElementById('gemini-ext-buttons')?.querySelectorAll('button');
     if (btns && btns[index]) {
         const cleanText = btns[index].textContent.replace(/^\[.\]\s+/, '');
         const inputArea = document.querySelector('rich-textarea, div[contenteditable="true"][aria-label*="prompt"], textarea');
-        inputArea.focus(); document.execCommand('selectAll', false, null); document.execCommand('insertText', false, cleanText);
-        inputArea.dispatchEvent(new Event('input', { bubbles: true }));
+        insertTextIntoInput(inputArea, cleanText);
         setTimeout(() => document.querySelector('button[aria-label="Send message"]')?.click(), 100);
     }
 }
+
 
 function addLog(message, isError = false) {
     const logsDiv = document.getElementById('gemini-ext-logs');
@@ -137,8 +169,7 @@ function renderButtons(queries) {
         btn.style.cssText = 'padding: 10px 14px; border-radius: 20px; border: 1px solid #555; background: transparent; color: inherit; cursor: pointer; text-align: left; font-size: 13px; width: 100%;';
         btn.onclick = () => {
             const inputArea = document.querySelector('rich-textarea, div[contenteditable="true"][aria-label*="prompt"], textarea');
-            inputArea.focus(); document.execCommand('selectAll', false, null); document.execCommand('insertText', false, q);
-            inputArea.dispatchEvent(new Event('input', { bubbles: true }));
+            insertTextIntoInput(inputArea, q);
         };
         buttonsDiv.appendChild(btn);
     });
@@ -217,7 +248,9 @@ if (typeof module !== 'undefined') {
         getOrCreateContainer,
         renderButtons,
         hashCode,
-        processChat
+        processChat,
+        get lastShortcutKey() { return lastShortcutKey; },
+        set lastShortcutKey(val) { lastShortcutKey = val; }
     };
 }
 
